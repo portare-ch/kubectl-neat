@@ -60,6 +60,12 @@ func Neat(in string) (string, error) {
 		return draft, nil
 	}
 
+	// must run before defaults neating, see the function
+	draft, err = neatDeprecatedServiceAccount(draft)
+	if err != nil {
+		return draft, fmt.Errorf("error in neatDeprecatedServiceAccount : %v", err)
+	}
+
 	// defaults neating
 	draft, err = defaults.NeatDefaults(draft)
 	if err != nil {
@@ -147,6 +153,24 @@ func neatServiceAccount(in string) (string, error) {
 	}
 	in, _ = sjson.Delete(in, "spec.serviceAccount") //Deprecated: Use serviceAccountName instead
 
+	return in, nil
+}
+
+// neatDeprecatedServiceAccount removes the deprecated serviceAccount field of a pod
+// spec where serviceAccountName is set as well. Since Kubernetes 1.37 the defaulting
+// code fills each of the two fields from the other, so if both stay in, each looks
+// like a default of the other, both are removed and the service account is lost.
+func neatDeprecatedServiceAccount(in string) (string, error) {
+	var err error
+	// pod, pod template, and resources that hold a pod template
+	for _, podSpec := range []string{"spec", "template.spec", "spec.template.spec"} {
+		if gjson.Get(in, podSpec+".serviceAccount").Exists() && gjson.Get(in, podSpec+".serviceAccountName").Exists() {
+			in, err = sjson.Delete(in, podSpec+".serviceAccount")
+			if err != nil {
+				return in, err
+			}
+		}
+	}
 	return in, nil
 }
 

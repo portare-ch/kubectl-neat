@@ -22,7 +22,47 @@ import (
 	"testing"
 
 	"github.com/itaysk/kubectl-neat/pkg/testutil"
+	"github.com/tidwall/gjson"
 )
+
+// Since Kubernetes 1.37 the defaulting code fills serviceAccount and
+// serviceAccountName from each other. The service account must survive neating.
+func TestNeatKeepsServiceAccount(t *testing.T) {
+	cases := []struct {
+		title   string
+		data    string
+		podSpec string
+	}{
+		{
+			title:   "pod",
+			data:    `{"apiVersion":"v1","kind":"Pod","metadata":{"name":"p"},"spec":{"containers":[{"name":"c","image":"nginx"}],"serviceAccount":"mysa","serviceAccountName":"mysa"}}`,
+			podSpec: "spec",
+		},
+		{
+			title:   "replication controller",
+			data:    `{"apiVersion":"v1","kind":"ReplicationController","metadata":{"name":"rc"},"spec":{"replicas":2,"selector":{"app":"a"},"template":{"metadata":{"labels":{"app":"a"}},"spec":{"containers":[{"name":"c","image":"nginx"}],"serviceAccount":"mysa","serviceAccountName":"mysa"}}}}`,
+			podSpec: "spec.template.spec",
+		},
+		{
+			title:   "pod template",
+			data:    `{"apiVersion":"v1","kind":"PodTemplate","metadata":{"name":"pt"},"template":{"spec":{"containers":[{"name":"c","image":"nginx"}],"serviceAccount":"mysa","serviceAccountName":"mysa"}}}`,
+			podSpec: "template.spec",
+		},
+	}
+	for _, c := range cases {
+		res, err := Neat(c.data)
+		if err != nil {
+			t.Errorf("%s: error in Neat: %v", c.title, err)
+			continue
+		}
+		if have := gjson.Get(res, c.podSpec+".serviceAccountName").String(); have != "mysa" {
+			t.Errorf("%s: serviceAccountName: want %q, have %q in %s", c.title, "mysa", have, res)
+		}
+		if gjson.Get(res, c.podSpec+".serviceAccount").Exists() {
+			t.Errorf("%s: deprecated serviceAccount was not removed: %s", c.title, res)
+		}
+	}
+}
 
 func TestNeatMetadata(t *testing.T) {
 	cases := []struct {
@@ -353,7 +393,7 @@ func TestNeat(t *testing.T) {
 				continue
 			}
 			if !equal {
-				t.Errorf("test case failed: %s:\nhave %s\nwant %s", fName, string(expBytes), resJSON)
+				t.Errorf("test case failed: %s:\nhave %s\nwant %s", fName, resJSON, string(expBytes))
 			}
 		}
 	}
