@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"unicode"
 
 	"github.com/ghodss/yaml"
@@ -82,49 +83,84 @@ kubectl neat -f ./my-pod.json --output yaml`,
 var kubectl string = "kubectl"
 
 var getCmd = &cobra.Command{
-	Use: "get",
-	Example: `kubectl neat get -- pod mypod -oyaml
-kubectl neat get -- svc -n default myservice --output json`,
-	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true}, //don't try to validate kubectl get's flags
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var out []byte
-		var err error
-		//reset defaults
-		//there are two output settings in this subcommand: kubectl get's and kubectl-neat's
-		//any combination of those can be provided by using the output flag in either side of the --
-		//the most efficient is kubectl: json, kubectl-neat: yaml
-		//0--0->Y--J #choose what's best for us
-		//0--Y->Y--Y #user did specify output in kubectl, so respect that
-		//0--J->J--J #user did specify output in kubectl, so respect that
-		//Y--0->Y--J #user doesn't care about kubectl so use json but convert back
-		//J--0->J--J #user expects json so use it for foth
-		//if the user specified both side we can't touch it
+	Use:   "get [kubectl get arguments]",
+	Short: "Run kubectl get and print the neated result",
+	Long: `Run "kubectl get" with the given arguments and print the neated result.
 
-		//the desired kubectl get output is always json, unless it was explicitly set by the user to yaml in which case the arg is overriden when concatenating the args later
-		cmdArgs := append([]string{"get", "-o", "json"}, args...)
-		kubectlCmd := exec.Command(kubectl, cmdArgs...)
-		kres, err := kubectlCmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("Error invoking kubectl as %v %v", kubectlCmd.Args, err)
-		}
-		//handle the case of 0--J->J--J
-		outFormat := *outputFormat
-		kubeout := "yaml"
-		for _, arg := range args {
-			if arg == "json" || arg == "ojson" {
-				outFormat = "json"
-			}
-		}
-		if !cmd.Flag("output").Changed && kubeout == "json" {
-			outFormat = "json"
-		}
-		out, err = NeatYAMLOrJSON(kres, outFormat)
+All arguments are handed to kubectl get unchanged, so the namespace, context and
+kubeconfig that kubectl would use apply here too, including a namespace selected
+with kubens. The output is YAML unless -o json is given.`,
+	Example: `kubectl neat get secret mysecret
+kubectl neat get pod mypod -n kube-system
+kubectl neat get svc myservice -o json
+kubectl neat get deploy -l app=web`,
+	// kubectl get's flags are not known here, so all arguments are taken as they
+	// are and only -o/--output and -h/--help are picked out by parseGetArgs.
+	DisableFlagParsing: true,
+	// A failing kubectl get prints its own error, the usage text adds nothing.
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kubectlArgs, outFormat, help, err := parseGetArgs(args)
 		if err != nil {
 			return err
 		}
-		cmd.Println(string(out))
+		if help {
+			return cmd.Help()
+		}
+		// kubectl-neat works on json, so that is what kubectl is always asked for.
+		kubectlCmd := exec.Command(kubectl, append([]string{"get", "-o", "json"}, kubectlArgs...)...)
+		kubectlCmd.Stdin = cmd.InOrStdin()
+		// kubectl's errors and warnings go to the user, and stay out of the json.
+		kubectlCmd.Stderr = cmd.ErrOrStderr()
+		kres, err := kubectlCmd.Output()
+		if err != nil {
+			return fmt.Errorf("Error invoking kubectl as %v: %v", kubectlCmd.Args, err)
+		}
+		out, err := NeatYAMLOrJSON(kres, outFormat)
+		if err != nil {
+			return err
+		}
+		if !bytes.HasSuffix(out, []byte("\n")) {
+			out = append(out, '\n')
+		}
+		cmd.Print(string(out))
 		return nil
 	},
+}
+
+// parseGetArgs splits the arguments of the get subcommand into the arguments for
+// kubectl get and the output format of kubectl-neat, which is yaml unless
+// -o/--output says otherwise. The output flag is taken out of the kubectl
+// arguments, since kubectl itself must always print json. A "--" is accepted
+// and dropped, so the older form "kubectl neat get -- pod mypod" still works.
+func parseGetArgs(args []string) (kubectlArgs []string, outFormat string, help bool, err error) {
+	outFormat = "yaml"
+	seenSeparator := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--" && !seenSeparator:
+			seenSeparator = true
+		case arg == "-h" || arg == "--help":
+			help = true
+		case arg == "-o" || arg == "--output":
+			if i+1 == len(args) {
+				return nil, "", false, fmt.Errorf("flag needs an argument: %s", arg)
+			}
+			i++
+			outFormat = args[i]
+		case strings.HasPrefix(arg, "--output="):
+			outFormat = strings.TrimPrefix(arg, "--output=")
+		case strings.HasPrefix(arg, "-o"):
+			outFormat = strings.TrimPrefix(strings.TrimPrefix(arg, "-o"), "=")
+		default:
+			kubectlArgs = append(kubectlArgs, arg)
+		}
+	}
+	if outFormat != "yaml" && outFormat != "json" {
+		return nil, "", false, fmt.Errorf("unsupported output format %q: kubectl-neat prints yaml or json", outFormat)
+	}
+	return kubectlArgs, outFormat, help, nil
 }
 
 // populated by goreleaser

@@ -58,13 +58,18 @@ kubectl neat -f ./my-pod.json --output yaml
 
 ### Kubernetes - kubectl get wrapper
 
-This mode is invoked by calling the `get` subcommand, i.e `kubectl neat get ...`. It is a convenience to run `kubectl get` and then `kubectl neat` the output in a single command. It accepts any argument that `kubectl get` accepts and passes those arguments as is to `kubectl get`. Since it executes `kubectl`, it need to be able to find it in the path.
+This mode is invoked by calling the `get` subcommand, i.e `kneat get ...`. It is a convenience to run `kubectl get` and then neat the output in a single command. It accepts any argument that `kubectl get` accepts and passes those arguments as is to `kubectl get`, so it uses the same context and namespace kubectl would, including a namespace selected with `kubens`. The output is YAML unless `-o json` is given. Other output formats such as `wide` or `jsonpath` are not supported. Since it executes `kubectl`, it needs to be able to find it in the path.
 
 Examples:
 ```bash
-kubectl neat get -- pod mypod -oyaml
-kubectl neat get -- svc -n default myservice --output json
+kneat get secret mysecret
+kneat get pod mypod -n kube-system
+kneat get svc myservice -o json
+kneat get deploy -l app=web
+kubectl neat get configmap myconfig
 ```
+
+The older form with `--`, such as `kubectl neat get -- pod mypod -oyaml`, still works.
 
 # How it works
 
