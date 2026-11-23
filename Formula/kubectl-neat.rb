@@ -1,5 +1,6 @@
 # Homebrew formula. This repository is its own tap:
 #   brew tap portare-ch/kubectl-neat https://github.com/portare-ch/kubectl-neat
+#   brew trust --formula portare-ch/kubectl-neat/kubectl-neat
 #   brew install kubectl-neat
 # To release a new version, push the tag and update `tag:` below.
 class KubectlNeat < Formula

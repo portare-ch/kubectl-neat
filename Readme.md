@@ -31,8 +31,11 @@ This repository is its own Homebrew tap. The formula builds kubectl-neat from so
 
 ```bash
 brew tap portare-ch/kubectl-neat https://github.com/portare-ch/kubectl-neat
+brew trust --formula portare-ch/kubectl-neat/kubectl-neat
 brew install kubectl-neat
 ```
+
+Homebrew only loads formulae from taps outside its own once you trust them; the second line trusts this one formula.
 
 To build the latest commit on `master` instead of the latest release, use `brew install --HEAD kubectl-neat`.
 
