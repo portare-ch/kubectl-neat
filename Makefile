@@ -4,12 +4,16 @@
 # make test: run all tests
 # make test-unit: just unit tests
 # make test-e2e: just e2e tests
+# make install: build and install kubectl-neat and kneat into $(PREFIX)/bin
 # make release: after git tag, release to github and prepare krew file
 
-.PHONY: test test-unit test-e2e build goreleaser release clean
+.PHONY: test test-unit test-e2e build install uninstall goreleaser release clean
 os ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 arch ?= $(shell go env GOARCH | tr '[:upper:]' '[:lower:]')
 underscore = $(word $2,$(subst _, ,$1))
+version ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0+unknown)
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
 
 test: test-unit test-e2e test-integration
 
@@ -27,7 +31,15 @@ build: dist/kubectl-neat_$(os)_$(arch)
 
 SRC = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 dist/kubectl-neat_%: $(SRC)
-	GOOS=$(call underscore,$*,1) GOARCH=$(call underscore,$*,2) go build -o dist/$(@F)
+	GOOS=$(call underscore,$*,1) GOARCH=$(call underscore,$*,2) go build -ldflags "-X github.com/itaysk/kubectl-neat/cmd.Version=$(version)" -o dist/$(@F)
+
+install: build
+	install -d "$(DESTDIR)$(BINDIR)"
+	install -m 0755 dist/kubectl-neat_$(os)_$(arch) "$(DESTDIR)$(BINDIR)/kubectl-neat"
+	ln -sf kubectl-neat "$(DESTDIR)$(BINDIR)/kneat"
+
+uninstall:
+	rm -f "$(DESTDIR)$(BINDIR)/kubectl-neat" "$(DESTDIR)$(BINDIR)/kneat"
 
 # release by default will not publish. run with `publish=1` to publish
 goreleaserflags = --skip=publish --snapshot

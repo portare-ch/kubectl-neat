@@ -25,13 +25,31 @@ If you try to `kubectl get` resources you have created, they will no longer look
 
 ## Installation
 
+### Homebrew (macOS)
+
+This repository is its own Homebrew tap. The formula builds kubectl-neat from source, and Homebrew installs Go as a build dependency if needed.
+
 ```bash
-kubectl krew install neat
+brew tap portare-ch/kubectl-neat https://github.com/portare-ch/kubectl-neat
+brew install kubectl-neat
 ```
 
-or just download the binary if you prefer.
+To build the latest commit on `master` instead of the latest release, use `brew install --HEAD kubectl-neat`.
 
-When used as a kubectl plugin the command is `kubectl neat`, and when used as a standalone executable it's `kubectl-neat`.
+### From source
+
+With Go installed:
+
+```bash
+make install                       # installs into /usr/local/bin
+make install PREFIX="$HOME/.local" # or into any other directory on your PATH
+```
+
+### krew
+
+`kubectl krew install neat` installs the upstream release, which doesn't include the changes made in this fork.
+
+Both Homebrew and `make install` install the `kubectl-neat` executable and a shorter `kneat` alias for it. kubectl also finds `kubectl-neat` as a plugin, so `kubectl neat`, `kubectl-neat` and `kneat` all run the same thing.
 
 ## Usage
 
